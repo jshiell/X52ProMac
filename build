@@ -1,0 +1,25 @@
+#!/bin/bash
+
+BASE_DIR=$(cd -P -- "$(dirname -- "$0")" >/dev/null && pwd -P)
+PROJECTS="X52ProDaemon"
+BUILD_CONFIGURATION="Deployment"
+
+pushd $BASE_DIR >/dev/null
+
+for PROJECT in $PROJECTS; do
+    echo "Building $PROJECT"
+
+    if [ ! -d $PROJECT ]; then
+        echo "Cannot find project $PROJECT"
+        exit 1
+    fi
+
+    pushd $PROJECT >/dev/null
+    if ! xcodebuild -configuration $BUILD_CONFIGURATION; then
+        echo "Build failed for project $PROJECT"
+        exit 1
+    fi
+    popd >/dev/null
+done
+
+popd >/dev/null

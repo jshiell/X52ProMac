@@ -1,0 +1,42 @@
+#!/bin/bash
+
+# A quick & dirty hack until I do some proper packaging
+
+BASE_DIR=$(cd -P -- "$(dirname -- "$0")" >/dev/null && pwd -P)
+
+INSTALL_DIR="/Library/Application Support/Infernus/X52ProDaemon"
+DAEMON_DIR="/Library/LaunchDaemons"
+
+if [[ $EUID -ne 0 ]]; then
+   echo "This script must be run as root" 1>&2
+   exit 1
+fi
+
+if [ ! -f "$BASE_DIR/X52ProDaemon/build/Release/X52ProDaemon" ]; then
+    echo "Can't find the daemon - did you run build?"
+    exit 1
+fi
+
+if [ -f "$DAEMON_DIR/org.infernus.X52ProDaemon.plist" ]; then
+    launchctl unload "$DAEMON_DIR/org.infernus.X52ProDaemon.plist"
+fi
+
+if [ ! -d "$DAEMON_DIR" ]; then
+    mkdir -p "$DAEMON_DIR"
+fi
+
+if [ ! -d "$INSTALL_DIR" ]; then
+    mkdir -p "$INSTALL_DIR"
+fi
+
+if ! cp "$BASE_DIR/X52ProDaemon/build/Release/X52ProDaemon" "$INSTALL_DIR"; then
+    echo "Failed to copy daemon"
+    exit 1
+fi
+
+
+if ! cp "$BASE_DIR/X52ProDaemon/X52ProDaemon/org.infernus.X52ProDaemon.plist" "$DAEMON_DIR"; then
+    echo "Failed to copy properties file"
+fi
+
+launchctl load "$DAEMON_DIR/org.infernus.X52ProDaemon.plist"
