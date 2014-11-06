@@ -2,7 +2,7 @@
 
 BASE_DIR=$(cd -P -- "$(dirname -- "$0")" >/dev/null && pwd -P)
 PROJECTS="X52ProDaemon"
-BUILD_CONFIGURATION="Deployment"
+BUILD_CONFIGURATION="Release"
 
 pushd $BASE_DIR >/dev/null
 
@@ -15,7 +15,7 @@ for PROJECT in $PROJECTS; do
     fi
 
     pushd $PROJECT >/dev/null
-    if ! xcodebuild -configuration $BUILD_CONFIGURATION; then
+    if ! xcodebuild clean build -configuration $BUILD_CONFIGURATION; then
         echo "Build failed for project $PROJECT"
         exit 1
     fi

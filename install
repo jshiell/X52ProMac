@@ -18,7 +18,9 @@ if [ ! -f "$BASE_DIR/X52ProDaemon/build/Release/X52ProDaemon" ]; then
 fi
 
 if [ -f "$DAEMON_DIR/org.infernus.X52ProDaemon.plist" ]; then
-    launchctl unload "$DAEMON_DIR/org.infernus.X52ProDaemon.plist"
+    if pgrep X52ProDaemon 1>/dev/null; then
+        launchctl unload "$DAEMON_DIR/org.infernus.X52ProDaemon.plist"
+    fi
 fi
 
 if [ ! -d "$DAEMON_DIR" ]; then
@@ -29,12 +31,17 @@ if [ ! -d "$INSTALL_DIR" ]; then
     mkdir -p "$INSTALL_DIR"
 fi
 
+if [ -f "$INSTALL_DIR/X52ProDaemon" ]; then
+    rm -f "$INSTALL_DIR/X52ProDaemon"
+fi
+if [ -f "$DAEMON_DIR/org.infernus.X52ProDaemon.plist" ]; then
+    rm -f "$DAEMON_DIR/org.infernus.X52ProDaemon.plist"
+fi
+
 if ! cp "$BASE_DIR/X52ProDaemon/build/Release/X52ProDaemon" "$INSTALL_DIR"; then
     echo "Failed to copy daemon"
     exit 1
 fi
-
-
 if ! cp "$BASE_DIR/X52ProDaemon/X52ProDaemon/org.infernus.X52ProDaemon.plist" "$DAEMON_DIR"; then
     echo "Failed to copy properties file"
 fi

@@ -21,7 +21,7 @@ Preferences
 
 You can toggle these with the *defaults* command:
 ```
-sudo defaults write org.infernus.X52ProDaemon DateFormat -string ddmmyy
+sudo defaults write /Library/Preferences/org.infernus.X52ProDaemon DateFormat -string ddmmyy
 ```
 
 * **DateFormat** - *string* value of ddmmyy, mmddyy or yymmdd
@@ -29,7 +29,6 @@ sudo defaults write org.infernus.X52ProDaemon DateFormat -string ddmmyy
 To Do
 -----
 
-* Check for preference changes
 * Allow time format to be set via a properties file
 * Allow MFD/LED light levels to be set via a properties file
 * Write a control panel for the above

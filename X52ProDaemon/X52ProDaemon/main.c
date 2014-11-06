@@ -74,8 +74,12 @@ void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
     short dayMonth;
     CFStringRef dateFormat;
     
-    dateFormat = (CFStringRef) CFPreferencesCopyAppValue(PROPERTY_DATE_FORMAT, APPLICATION_ID);
-    if (!dateFormat || CFStringGetLength(dateFormat) != 6) {
+    dateFormat = (CFStringRef) CFPreferencesCopyValue(PROPERTY_DATE_FORMAT, APPLICATION_ID, kCFPreferencesAnyUser, kCFPreferencesCurrentHost);
+    if (!dateFormat) {
+        dateFormat = DEFAULT_DATE_FORMAT;
+    }
+    if (CFStringGetLength(dateFormat) != 6) {
+        CFRelease(dateFormat);
         dateFormat = DEFAULT_DATE_FORMAT;
     }
     
