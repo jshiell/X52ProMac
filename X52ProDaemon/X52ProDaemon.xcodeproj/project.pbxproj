@@ -204,6 +204,9 @@
 		C7225DBA1A09733300BAC4BC /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				INSTALL_GROUP = admin;
+				INSTALL_OWNER = root;
+				INSTALL_PATH = "/Library/Application Support/Infernus/X52ProDaemon";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -211,6 +214,9 @@
 		C7225DBB1A09733300BAC4BC /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				INSTALL_GROUP = admin;
+				INSTALL_OWNER = root;
+				INSTALL_PATH = "/Library/Application Support/Infernus/X52ProDaemon";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;

@@ -13,6 +13,14 @@
 #include <IOKit/usb/USBSpec.h>
 #include <time.h>
 
+#define APPLICATION_ID              CFSTR("org.infernus.X52ProDaemon")
+
+#define BUFFER_SIZE                 4096
+
+#define PROPERTY_DATE_FORMAT        CFSTR("DateFormat")
+
+#define DEFAULT_DATE_FORMAT         CFSTR("ddmmyy")
+
 #define VENDOR_ID                   0x06A3
 #define PRODUCT_ID                  0x0762
 #define REQUEST_TYPE                0x91
@@ -33,9 +41,17 @@ typedef struct DeviceData {
     dispatch_source_t       dispatchSource;
 } DeviceData;
 
-static IONotificationPortRef    gNotifyPort;
-static io_iterator_t            gAddedIter;
-static CFRunLoopRef             gRunLoop;
+void SignalHandler(int sigraised);
+void SendControlRequest(IOUSBDeviceInterface** usbDevice, short wValue, short wIndex);
+void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo);
+void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo);
+void TimeUpdateHandler(void* context);
+void DeviceNotification(void *refCon, io_service_t service, natural_t messageType, void *messageArgument);
+void DeviceAdded(void *refCon, io_iterator_t iterator);
+
+static IONotificationPortRef gNotifyPort;
+static io_iterator_t gAddedIter;
+static CFRunLoopRef gRunLoop;
 
 void SendControlRequest(IOUSBDeviceInterface** usbDevice, short wValue, short wIndex) {
     kern_return_t kr;
@@ -54,22 +70,35 @@ void SendControlRequest(IOUSBDeviceInterface** usbDevice, short wValue, short wI
 }
 
 void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
-    short field1;
-    short field2;
-    short field3;
+    short fields[3] = {0, 0, 0};
     short dayMonth;
+    CFStringRef dateFormat;
     
-    /* TODO multiple date formats */
-    field1 = localtimeInfo->tm_mday;
-    field2 = localtimeInfo->tm_mon + 1;
-    field3 = localtimeInfo->tm_year + 1900;
+    dateFormat = (CFStringRef) CFPreferencesCopyAppValue(PROPERTY_DATE_FORMAT, APPLICATION_ID);
+    if (!dateFormat || CFStringGetLength(dateFormat) != 6) {
+        dateFormat = DEFAULT_DATE_FORMAT;
+    }
     
-    dayMonth = field1;
+    for (int i = 0; i < 3; ++i) {
+        if (CFStringCompareWithOptions(dateFormat, CFSTR("dd"), CFRangeMake(i * 2, 2), kCFCompareCaseInsensitive) == kCFCompareEqualTo) {
+            fields[i] = localtimeInfo->tm_mday;
+        } else if (CFStringCompareWithOptions(dateFormat, CFSTR("mm"), CFRangeMake(i * 2, 2), kCFCompareCaseInsensitive) == kCFCompareEqualTo) {
+            fields[i] = localtimeInfo->tm_mon + 1;
+        } else if (CFStringCompareWithOptions(dateFormat, CFSTR("yy"), CFRangeMake(i * 2, 2), kCFCompareCaseInsensitive) == kCFCompareEqualTo) {
+            fields[i] = localtimeInfo->tm_year + 1900;
+        }
+    }
+    
+    dayMonth = fields[0];
     dayMonth &= ~(255 << 8);
-    dayMonth |= (field2 << 8);
+    dayMonth |= (fields[1] << 8);
     
     SendControlRequest(usbDevice, dayMonth, INDEX_UPDATE_DATE_DAYMONTH);
-    SendControlRequest(usbDevice, field3, INDEX_UPDATE_DATE_YEAR);
+    SendControlRequest(usbDevice, fields[2], INDEX_UPDATE_DATE_YEAR);
+    
+    if (dateFormat != DEFAULT_DATE_FORMAT) {
+        CFRelease(dateFormat);
+    }
 }
 
 void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
@@ -103,8 +132,7 @@ void TimeUpdateHandler(void* context) {
     }
 }
 
-void DeviceNotification(void *refCon, io_service_t service, natural_t messageType, void *messageArgument)
-{
+void DeviceNotification(void *refCon, io_service_t service, natural_t messageType, void *messageArgument) {
     kern_return_t kr;
     DeviceData *dataRef = (DeviceData *) refCon;
     
@@ -125,8 +153,7 @@ void DeviceNotification(void *refCon, io_service_t service, natural_t messageTyp
     }
 }
 
-void DeviceAdded(void *refCon, io_iterator_t iterator)
-{
+void DeviceAdded(void *refCon, io_iterator_t iterator) {
     kern_return_t kr;
     io_service_t usbDevice;
     IOCFPlugInInterface **plugInInterface = NULL;
@@ -177,42 +204,38 @@ void DeviceAdded(void *refCon, io_iterator_t iterator)
                                               &(dataRef->notification));
         
         if (KERN_SUCCESS != kr) {
-            printf("IOServiceAddInterestNotification returned 0x%08x.\n", kr);
+            fprintf(stderr, "IOServiceAddInterestNotification returned 0x%08x.\n", kr);
         }
         
         kr = IOObjectRelease(usbDevice);
     }
 }
 
-void SignalHandler(int sigraised)
-{
-    fprintf(stderr, "\nInterrupted.\n");
-    
+void SignalHandler(int sigraised) {
+    fprintf(stderr, "Interrupted, exiting.\n");
     exit(0);
 }
 
-int main(int argc, const char *argv[])
-{
-    sig_t oldHandler = signal(SIGINT, SignalHandler);
-    if (oldHandler == SIG_ERR) {
-        fprintf(stderr, "Could not establish new signal handler.");
-    }
-    
+int main(int argc, const char *argv[]) {
     CFMutableDictionaryRef matchingDictionary = NULL;
     SInt32 idVendor = VENDOR_ID;
     SInt32 idProduct = PRODUCT_ID;
     CFRunLoopSourceRef runLoopSource;
     kern_return_t kr;
+    sig_t oldHandler;
+    
+    oldHandler = signal(SIGINT, SignalHandler);
+    if (oldHandler == SIG_ERR) {
+        fprintf(stderr, "Could not establish new signal handler.");
+    }
     
     matchingDictionary = IOServiceMatching(kIOUSBDeviceClassName);
     CFDictionaryAddValue(matchingDictionary,
                          CFSTR(kUSBVendorID),
-                         CFNumberCreate(kCFAllocatorDefault,
-                                        kCFNumberSInt32Type, &idVendor));
+                         CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &idVendor));
     CFDictionaryAddValue(matchingDictionary,
                          CFSTR(kUSBProductID),
-                         CFNumberCreate(kCFAllocatorDefault,
-                                        kCFNumberSInt32Type, &idProduct));
+                         CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt32Type, &idProduct));
 
     gNotifyPort = IONotificationPortCreate(kIOMasterPortDefault);
     runLoopSource = IONotificationPortGetRunLoopSource(gNotifyPort);
@@ -225,13 +248,12 @@ int main(int argc, const char *argv[])
                                           matchingDictionary,
                                           DeviceAdded,
                                           NULL,
-                                          &gAddedIter
-                                          );
+                                          &gAddedIter);
     
     DeviceAdded(NULL, gAddedIter);
     
     CFRunLoopRun();
     
-    fprintf(stderr, "Unexpectedly back from CFRunLoopRun()!\n");
+    fprintf(stderr, "Unexpected exit from CFRunLoopRun()\n");
     return 0;
 }

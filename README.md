@@ -16,10 +16,21 @@ X52ProDaemon
 
 This is a simple daemon to keep the date & time up to date on the device. It'll update them every second, which is more than enough for our simple purposes.
 
+Preferences
+-----------
+
+You can toggle these with the *defaults* command:
+```
+sudo defaults write org.infernus.X52ProDaemon DateFormat -string ddmmyy
+```
+
+* **DateFormat** - *string* value of ddmmyy, mmddyy or yymmdd
+
 To Do
 -----
 
-* Allow date & time formats to be set via a properties file
+* Check for preference changes
+* Allow time format to be set via a properties file
 * Allow MFD/LED light levels to be set via a properties file
 * Write a control panel for the above
 
