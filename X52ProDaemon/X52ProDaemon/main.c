@@ -18,8 +18,10 @@
 #define BUFFER_SIZE                 4096
 
 #define PROPERTY_DATE_FORMAT        CFSTR("DateFormat")
+#define PROPERTY_CLOCK_TYPE         CFSTR("ClockType")
 
 #define DEFAULT_DATE_FORMAT         CFSTR("ddmmyy")
+#define DEFAULT_CLOCK_TYPE          CFSTR("24")
 
 #define VENDOR_ID                   0x06A3
 #define PRODUCT_ID                  0x0762
@@ -107,6 +109,12 @@ void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
 
 void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
     short timeValue;
+    CFStringRef clockType;
+    
+    clockType = (CFStringRef) CFPreferencesCopyValue(PROPERTY_CLOCK_TYPE, APPLICATION_ID, kCFPreferencesAnyUser, kCFPreferencesCurrentHost);
+    if (clockType == NULL) {
+        clockType = DEFAULT_CLOCK_TYPE;
+    }
     
     timeValue = localtimeInfo->tm_min;
     
@@ -114,10 +122,15 @@ void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
     timeValue |= (localtimeInfo->tm_hour << 8);
     
     timeValue &= (short) ~(1 << 15);
-    /* TODO support 12 hour clock */
-    timeValue |= (short) (1 << 15);
+    if (CFStringCompare(clockType, CFSTR("12"), 0) != kCFCompareEqualTo) {
+        timeValue |= (short) (1 << 15);
+    }
     
     SendControlRequest(usbDevice, timeValue, INDEX_UPDATE_PRIMARY_CLOCK);
+    
+    if (clockType != DEFAULT_CLOCK_TYPE) {
+        CFRelease(clockType);
+    }
 }
 
 void TimeUpdateHandler(void* context) {

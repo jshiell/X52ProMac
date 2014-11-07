@@ -24,12 +24,12 @@ You can toggle these with the *defaults* command:
 sudo defaults write /Library/Preferences/org.infernus.X52ProDaemon DateFormat -string ddmmyy
 ```
 
-* **DateFormat** - *string* value of ddmmyy, mmddyy or yymmdd
+* **DateFormat** - *string* value of ddmmyy (default), mmddyy or yymmdd
+* **ClockType** - *string* value of 12 or 24 (default)
 
 To Do
 -----
 
-* Allow time format to be set via a properties file
 * Allow MFD/LED light levels to be set via a properties file
 * Write a control panel for the above
 
