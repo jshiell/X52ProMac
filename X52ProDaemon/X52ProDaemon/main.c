@@ -19,9 +19,13 @@
 
 #define PROPERTY_DATE_FORMAT        CFSTR("DateFormat")
 #define PROPERTY_CLOCK_TYPE         CFSTR("ClockType")
+#define PROPERTY_MFD_BRIGHTNESS     CFSTR("MFDBrightness")
+#define PROPERTY_LED_BRIGHTNESS     CFSTR("LEDBrightness")
 
 #define DEFAULT_DATE_FORMAT         CFSTR("ddmmyy")
 #define DEFAULT_CLOCK_TYPE          CFSTR("24")
+#define DEFAULT_MFD_BRIGHTNESS      128
+#define DEFAULT_LCD_BRIGHTNESS      128
 
 #define VENDOR_ID                   0x06A3
 #define PRODUCT_ID                  0x0762
@@ -30,12 +34,8 @@
 #define INDEX_UPDATE_PRIMARY_CLOCK  0xc0
 #define INDEX_UPDATE_DATE_DAYMONTH  0xc4
 #define INDEX_UPDATE_DATE_YEAR      0xc8
-#define INDEX_DELETE_LINE1          0xd9
-#define INDEX_DELETE_LINE2          0xda
-#define INDEX_DELETE_LINE3          0xdc
-#define INDEX_APPEND_LINE1          0xd1
-#define INDEX_APPEND_LINE2          0xd2
-#define INDEX_APPEND_LINE3          0xd4
+#define INDEX_MFD_BRIGHTNESS        0xb1
+#define INDEX_LED_BRIGHTNESS        0xb2
 
 typedef struct DeviceData {
     io_object_t             notification;
@@ -44,9 +44,11 @@ typedef struct DeviceData {
 } DeviceData;
 
 void SignalHandler(int sigraised);
-void SendControlRequest(IOUSBDeviceInterface** usbDevice, short wValue, short wIndex);
+void SendControlRequest(IOUSBDeviceInterface** usbDevice, UInt16 wValue, UInt16 wIndex);
 void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo);
 void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo);
+void UpdateBrightness(IOUSBDeviceInterface **usbDevice, UInt16 updateIndex, CFStringRef property, UInt16 defaultValue);
+void RestoreConfiguration(IOUSBDeviceInterface **usbDevice);
 void TimeUpdateHandler(void* context);
 void DeviceNotification(void *refCon, io_service_t service, natural_t messageType, void *messageArgument);
 void DeviceAdded(void *refCon, io_iterator_t iterator);
@@ -55,7 +57,7 @@ static IONotificationPortRef gNotifyPort;
 static io_iterator_t gAddedIter;
 static CFRunLoopRef gRunLoop;
 
-void SendControlRequest(IOUSBDeviceInterface** usbDevice, short wValue, short wIndex) {
+void SendControlRequest(IOUSBDeviceInterface** usbDevice, UInt16 wValue, UInt16 wIndex) {
     kern_return_t kr;
     
     IOUSBDevRequest request;
@@ -72,8 +74,8 @@ void SendControlRequest(IOUSBDeviceInterface** usbDevice, short wValue, short wI
 }
 
 void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
-    short fields[3] = {0, 0, 0};
-    short dayMonth;
+    UInt16 fields[3] = {0, 0, 0};
+    UInt16 dayMonth;
     CFStringRef dateFormat;
     
     dateFormat = (CFStringRef) CFPreferencesCopyValue(PROPERTY_DATE_FORMAT, APPLICATION_ID, kCFPreferencesAnyUser, kCFPreferencesCurrentHost);
@@ -85,7 +87,7 @@ void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
         dateFormat = DEFAULT_DATE_FORMAT;
     }
     
-    for (int i = 0; i < 3; ++i) {
+    for (short i = 0; i < 3; ++i) {
         if (CFStringCompareWithOptions(dateFormat, CFSTR("dd"), CFRangeMake(i * 2, 2), kCFCompareCaseInsensitive) == kCFCompareEqualTo) {
             fields[i] = localtimeInfo->tm_mday;
         } else if (CFStringCompareWithOptions(dateFormat, CFSTR("mm"), CFRangeMake(i * 2, 2), kCFCompareCaseInsensitive) == kCFCompareEqualTo) {
@@ -108,7 +110,7 @@ void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
 }
 
 void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
-    short timeValue;
+    UInt16 timeValue;
     CFStringRef clockType;
     
     clockType = (CFStringRef) CFPreferencesCopyValue(PROPERTY_CLOCK_TYPE, APPLICATION_ID, kCFPreferencesAnyUser, kCFPreferencesCurrentHost);
@@ -121,9 +123,9 @@ void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
     timeValue &= ~(255 << 8);
     timeValue |= (localtimeInfo->tm_hour << 8);
     
-    timeValue &= (short) ~(1 << 15);
+    timeValue &= (UInt16) ~(1 << 15);
     if (CFStringCompare(clockType, CFSTR("12"), 0) != kCFCompareEqualTo) {
-        timeValue |= (short) (1 << 15);
+        timeValue |= (UInt16) (1 << 15);
     }
     
     SendControlRequest(usbDevice, timeValue, INDEX_UPDATE_PRIMARY_CLOCK);
@@ -141,11 +143,36 @@ void TimeUpdateHandler(void* context) {
         struct tm *localtimeInfo;
         time(&rawtime);
         localtimeInfo = localtime(&rawtime);
+        IOReturn openResult;
     
-        (*dataRef->deviceInterface)->USBDeviceOpen(dataRef->deviceInterface);
-        UpdateTime(dataRef->deviceInterface, localtimeInfo);
-        UpdateDate(dataRef->deviceInterface, localtimeInfo);
-        (*dataRef->deviceInterface)->USBDeviceClose(dataRef->deviceInterface);
+        openResult = (*dataRef->deviceInterface)->USBDeviceOpen(dataRef->deviceInterface);
+        if (openResult == kIOReturnSuccess || openResult == kIOReturnExclusiveAccess) {
+            UpdateTime(dataRef->deviceInterface, localtimeInfo);
+            UpdateDate(dataRef->deviceInterface, localtimeInfo);
+            (*dataRef->deviceInterface)->USBDeviceClose(dataRef->deviceInterface);
+        }
+    }
+}
+
+void UpdateBrightness(IOUSBDeviceInterface **usbDevice, UInt16 updateIndex, CFStringRef property, UInt16 defaultValue) {
+    Boolean valueValid = 0;
+    UInt16 value = CFPreferencesGetAppIntegerValue(property, APPLICATION_ID, &valueValid);
+    if (!valueValid || value < 0 || value > 128) {
+        value = defaultValue;
+    }
+    
+    SendControlRequest(usbDevice, value, updateIndex);
+}
+
+void RestoreConfiguration(IOUSBDeviceInterface **usbDevice) {
+    IOReturn openResult;
+    
+    openResult = (*usbDevice)->USBDeviceOpen(usbDevice);
+    if (openResult == kIOReturnSuccess || openResult == kIOReturnExclusiveAccess) {
+        UpdateBrightness(usbDevice, INDEX_LED_BRIGHTNESS, PROPERTY_LED_BRIGHTNESS, DEFAULT_LCD_BRIGHTNESS);
+        UpdateBrightness(usbDevice, INDEX_MFD_BRIGHTNESS, PROPERTY_MFD_BRIGHTNESS, DEFAULT_MFD_BRIGHTNESS);
+
+        (*usbDevice)->USBDeviceClose(usbDevice);
     }
 }
 
@@ -223,6 +250,8 @@ void DeviceAdded(void *refCon, io_iterator_t iterator) {
         if (KERN_SUCCESS != kr) {
             fprintf(stderr, "IOServiceAddInterestNotification returned 0x%08x.\n", kr);
         }
+        
+        RestoreConfiguration(dataRef->deviceInterface);
         
         kr = IOObjectRelease(usbDevice);
     }

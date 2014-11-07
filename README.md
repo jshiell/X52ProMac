@@ -1,10 +1,12 @@
 X52ProMac
 =========
 
-Some toys to work with the Saitek X52 Pro on OS X. At present, there's not a lot here, but assuming I don't get distracted it should grow.
+An in-progress effort to create basic tools to manage the Saitek X52 Pro under OS X.
 
 Quick Instructions
 ------------------
+
+Eventually I'll write an installation package, but in the meantime:
 
 ```
 ./build
@@ -16,6 +18,8 @@ X52ProDaemon
 
 This is a simple daemon to keep the date & time up to date on the device. It'll update them every second, which is more than enough for our simple purposes.
 
+It will also set the brightness on the LEDs and MFD, but only on startup and when the device has just been plugged in.
+
 Preferences
 -----------
 
@@ -26,11 +30,12 @@ sudo defaults write /Library/Preferences/org.infernus.X52ProDaemon DateFormat -s
 
 * **DateFormat** - *string* value of ddmmyy (default), mmddyy or yymmdd
 * **ClockType** - *string* value of 12 or 24 (default)
+* **MFDBrightness** - **int** value of 0 - 128 (default)
+* **LEDBrightness** - **int** value of 0 - 128 (default)
 
 To Do
 -----
 
-* Allow MFD/LED light levels to be set via a properties file
 * Write a control panel for the above
 
 

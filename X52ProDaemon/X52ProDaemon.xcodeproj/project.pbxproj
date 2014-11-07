@@ -207,6 +207,7 @@
 				INSTALL_GROUP = admin;
 				INSTALL_OWNER = root;
 				INSTALL_PATH = "/Library/Application Support/Infernus/X52ProDaemon";
+				OTHER_CFLAGS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -217,6 +218,7 @@
 				INSTALL_GROUP = admin;
 				INSTALL_OWNER = root;
 				INSTALL_PATH = "/Library/Application Support/Infernus/X52ProDaemon";
+				OTHER_CFLAGS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
