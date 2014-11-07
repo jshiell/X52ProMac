@@ -25,7 +25,7 @@
 #define DEFAULT_DATE_FORMAT         CFSTR("ddmmyy")
 #define DEFAULT_CLOCK_TYPE          CFSTR("24")
 #define DEFAULT_MFD_BRIGHTNESS      128
-#define DEFAULT_LCD_BRIGHTNESS      128
+#define DEFAULT_LED_BRIGHTNESS      128
 
 #define VENDOR_ID                   0x06A3
 #define PRODUCT_ID                  0x0762
@@ -38,20 +38,25 @@
 #define INDEX_LED_BRIGHTNESS        0xb2
 
 typedef struct DeviceData {
-    io_object_t             notification;
-    IOUSBDeviceInterface    **deviceInterface;
-    dispatch_source_t       dispatchSource;
+    io_object_t notification;
+    IOUSBDeviceInterface **deviceInterface;
+    dispatch_source_t dispatchSource;
+    
+    UInt16 lastDayMonth;
+    UInt16 lastYear;
+    UInt16 lastMFDBrightness;
+    UInt16 lastLEDBrightness;
 } DeviceData;
 
 void SignalHandler(int sigraised);
 void SendControlRequest(IOUSBDeviceInterface** usbDevice, UInt16 wValue, UInt16 wIndex);
-void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo);
+void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo, DeviceData *deviceData);
 void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo);
-void UpdateBrightness(IOUSBDeviceInterface **usbDevice, UInt16 updateIndex, CFStringRef property, UInt16 defaultValue);
-void RestoreConfiguration(IOUSBDeviceInterface **usbDevice);
+void UpdateBrightness(IOUSBDeviceInterface **usbDevice, DeviceData *deviceData);
 void TimeUpdateHandler(void* context);
 void DeviceNotification(void *refCon, io_service_t service, natural_t messageType, void *messageArgument);
 void DeviceAdded(void *refCon, io_iterator_t iterator);
+void InitialiseDeviceData(DeviceData *deviceData);
 
 static IONotificationPortRef gNotifyPort;
 static io_iterator_t gAddedIter;
@@ -73,7 +78,7 @@ void SendControlRequest(IOUSBDeviceInterface** usbDevice, UInt16 wValue, UInt16 
     }
 }
 
-void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
+void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo, DeviceData *deviceData) {
     UInt16 fields[3] = {0, 0, 0};
     UInt16 dayMonth;
     CFStringRef dateFormat;
@@ -101,8 +106,14 @@ void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
     dayMonth &= ~(255 << 8);
     dayMonth |= (fields[1] << 8);
     
-    SendControlRequest(usbDevice, dayMonth, INDEX_UPDATE_DATE_DAYMONTH);
-    SendControlRequest(usbDevice, fields[2], INDEX_UPDATE_DATE_YEAR);
+    if (deviceData->lastDayMonth != dayMonth) {
+        SendControlRequest(usbDevice, dayMonth, INDEX_UPDATE_DATE_DAYMONTH);
+        deviceData->lastDayMonth = dayMonth;
+    }
+    if (deviceData->lastYear != fields[2]) {
+        SendControlRequest(usbDevice, fields[2], INDEX_UPDATE_DATE_YEAR);
+        deviceData->lastYear = fields[2];
+    }
     
     if (dateFormat != DEFAULT_DATE_FORMAT) {
         CFRelease(dateFormat);
@@ -135,6 +146,30 @@ void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
     }
 }
 
+void UpdateBrightness(IOUSBDeviceInterface **usbDevice, DeviceData *deviceData) {
+    Boolean valueValid = 0;
+    UInt16 mfdBrightness;
+    UInt16 ledBrightness;
+    
+    mfdBrightness = CFPreferencesGetAppIntegerValue(PROPERTY_MFD_BRIGHTNESS, APPLICATION_ID, &valueValid);
+    if (!valueValid || mfdBrightness < 0 || mfdBrightness > 128) {
+        mfdBrightness = DEFAULT_MFD_BRIGHTNESS;
+    }
+    if (mfdBrightness != deviceData->lastMFDBrightness) {
+        SendControlRequest(usbDevice, mfdBrightness, INDEX_MFD_BRIGHTNESS);
+        deviceData->lastMFDBrightness = mfdBrightness;
+    }
+    
+    ledBrightness = CFPreferencesGetAppIntegerValue(PROPERTY_LED_BRIGHTNESS, APPLICATION_ID, &valueValid);
+    if (!valueValid || ledBrightness < 0 || ledBrightness > 128) {
+        ledBrightness = DEFAULT_LED_BRIGHTNESS;
+    }
+    if (ledBrightness != deviceData->lastLEDBrightness) {
+        SendControlRequest(usbDevice, ledBrightness, INDEX_LED_BRIGHTNESS);
+        deviceData->lastLEDBrightness = ledBrightness;
+    }
+}
+
 void TimeUpdateHandler(void* context) {
     DeviceData *dataRef = (DeviceData*) context;
     
@@ -148,32 +183,19 @@ void TimeUpdateHandler(void* context) {
         openResult = (*dataRef->deviceInterface)->USBDeviceOpen(dataRef->deviceInterface);
         if (openResult == kIOReturnSuccess || openResult == kIOReturnExclusiveAccess) {
             UpdateTime(dataRef->deviceInterface, localtimeInfo);
-            UpdateDate(dataRef->deviceInterface, localtimeInfo);
+            UpdateDate(dataRef->deviceInterface, localtimeInfo, dataRef);
+            UpdateBrightness(dataRef->deviceInterface, dataRef);
+            
             (*dataRef->deviceInterface)->USBDeviceClose(dataRef->deviceInterface);
         }
     }
 }
 
-void UpdateBrightness(IOUSBDeviceInterface **usbDevice, UInt16 updateIndex, CFStringRef property, UInt16 defaultValue) {
-    Boolean valueValid = 0;
-    UInt16 value = CFPreferencesGetAppIntegerValue(property, APPLICATION_ID, &valueValid);
-    if (!valueValid || value < 0 || value > 128) {
-        value = defaultValue;
-    }
-    
-    SendControlRequest(usbDevice, value, updateIndex);
-}
+void InitialiseDeviceData(DeviceData *deviceData) {
+    bzero(deviceData, sizeof(DeviceData));
 
-void RestoreConfiguration(IOUSBDeviceInterface **usbDevice) {
-    IOReturn openResult;
-    
-    openResult = (*usbDevice)->USBDeviceOpen(usbDevice);
-    if (openResult == kIOReturnSuccess || openResult == kIOReturnExclusiveAccess) {
-        UpdateBrightness(usbDevice, INDEX_LED_BRIGHTNESS, PROPERTY_LED_BRIGHTNESS, DEFAULT_LCD_BRIGHTNESS);
-        UpdateBrightness(usbDevice, INDEX_MFD_BRIGHTNESS, PROPERTY_MFD_BRIGHTNESS, DEFAULT_MFD_BRIGHTNESS);
-
-        (*usbDevice)->USBDeviceClose(usbDevice);
-    }
+    deviceData->lastLEDBrightness = -1;
+    deviceData->lastMFDBrightness = -1;
 }
 
 void DeviceNotification(void *refCon, io_service_t service, natural_t messageType, void *messageArgument) {
@@ -208,7 +230,7 @@ void DeviceAdded(void *refCon, io_iterator_t iterator) {
         DeviceData *dataRef = NULL;
         
         dataRef = malloc(sizeof(DeviceData));
-        bzero(dataRef, sizeof(DeviceData));
+        InitialiseDeviceData(dataRef);
         
         kr = IOCreatePlugInInterfaceForService(usbDevice,
                                                kIOUSBDeviceUserClientTypeID,
@@ -250,8 +272,6 @@ void DeviceAdded(void *refCon, io_iterator_t iterator) {
         if (KERN_SUCCESS != kr) {
             fprintf(stderr, "IOServiceAddInterestNotification returned 0x%08x.\n", kr);
         }
-        
-        RestoreConfiguration(dataRef->deviceInterface);
         
         kr = IOObjectRelease(usbDevice);
     }

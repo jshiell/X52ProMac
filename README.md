@@ -16,9 +16,9 @@ sudo ./install
 X52ProDaemon
 ------------
 
-This is a simple daemon to keep the date & time up to date on the device. It'll update them every second, which is more than enough for our simple purposes.
+This will keep the date & time up to date on the device. It'll update them every second, which is more than enough for our simple purposes.
 
-It will also set the brightness on the LEDs and MFD, but only on startup and when the device has just been plugged in.
+It will also set the brightness on the LEDs and MFD, and update these if the preferences are changed.
 
 Preferences
 -----------
