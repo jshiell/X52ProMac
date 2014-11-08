@@ -21,11 +21,16 @@
 #define PROPERTY_CLOCK_TYPE         CFSTR("ClockType")
 #define PROPERTY_MFD_BRIGHTNESS     CFSTR("MFDBrightness")
 #define PROPERTY_LED_BRIGHTNESS     CFSTR("LEDBrightness")
+#define PROPERTY_BLINK_CLUTCH       CFSTR("BlinkClutch")
 
 #define DEFAULT_DATE_FORMAT         CFSTR("ddmmyy")
 #define DEFAULT_CLOCK_TYPE          CFSTR("24")
 #define DEFAULT_MFD_BRIGHTNESS      128
 #define DEFAULT_LED_BRIGHTNESS      128
+#define DEFAULT_BLINK_CLUTCH        0
+
+#define VALUE_ON                    0x51
+#define VALUE_OFF                   0x50
 
 #define VENDOR_ID                   0x06A3
 #define PRODUCT_ID                  0x0762
@@ -36,6 +41,7 @@
 #define INDEX_UPDATE_DATE_YEAR      0xc8
 #define INDEX_MFD_BRIGHTNESS        0xb1
 #define INDEX_LED_BRIGHTNESS        0xb2
+#define INDEX_BLINK_CLUTCH          0xb4
 
 typedef struct DeviceData {
     io_object_t notification;
@@ -47,6 +53,7 @@ typedef struct DeviceData {
     UInt16 lastYear;
     UInt16 lastMFDBrightness;
     UInt16 lastLEDBrightness;
+    Boolean lastBlinkClutch;
 } DeviceData;
 
 void SignalHandler(int sigraised);
@@ -54,10 +61,12 @@ void SendControlRequest(IOUSBDeviceInterface** usbDevice, UInt16 wValue, UInt16 
 void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo, DeviceData *deviceData);
 void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo, DeviceData *deviceData);
 void UpdateBrightness(IOUSBDeviceInterface **usbDevice, DeviceData *deviceData);
+void UpdateBlinkClutch(IOUSBDeviceInterface **usbDevice, DeviceData *deviceData);
 void TimeUpdateHandler(void* context);
 void DeviceNotification(void *refCon, io_service_t service, natural_t messageType, void *messageArgument);
 void DeviceAdded(void *refCon, io_iterator_t iterator);
 void InitialiseDeviceData(DeviceData *deviceData);
+UInt16 GetValueForBoolean(Boolean value);
 
 static IONotificationPortRef gNotifyPort;
 static io_iterator_t gAddedIter;
@@ -174,6 +183,30 @@ void UpdateBrightness(IOUSBDeviceInterface **usbDevice, DeviceData *deviceData) 
     }
 }
 
+UInt16 GetValueForBoolean(Boolean value) {
+    if (value) {
+        return VALUE_ON;
+    }
+    return VALUE_OFF;
+}
+
+void UpdateBlinkClutch(IOUSBDeviceInterface **usbDevice, DeviceData *deviceData) {
+    Boolean valueValid = 0;
+    Boolean value;
+    UInt16 deviceValue;
+    
+    value = CFPreferencesGetAppBooleanValue(PROPERTY_BLINK_CLUTCH, APPLICATION_ID, &valueValid);
+    if (!valueValid) {
+        value = DEFAULT_BLINK_CLUTCH;
+    }
+    
+    deviceValue = GetValueForBoolean(value);
+    if (deviceData->lastBlinkClutch != deviceValue) {
+        SendControlRequest(usbDevice, deviceValue, INDEX_BLINK_CLUTCH);
+        deviceData->lastBlinkClutch = deviceValue;
+    }
+}
+
 void TimeUpdateHandler(void* context) {
     DeviceData *dataRef = (DeviceData*) context;
     
@@ -189,6 +222,7 @@ void TimeUpdateHandler(void* context) {
             UpdateTime(dataRef->deviceInterface, localtimeInfo, dataRef);
             UpdateDate(dataRef->deviceInterface, localtimeInfo, dataRef);
             UpdateBrightness(dataRef->deviceInterface, dataRef);
+            UpdateBlinkClutch(dataRef->deviceInterface, dataRef);
             
             (*dataRef->deviceInterface)->USBDeviceClose(dataRef->deviceInterface);
         }

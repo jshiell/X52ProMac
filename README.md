@@ -18,7 +18,7 @@ X52ProDaemon
 
 This will keep the date & time up to date on the device. It'll update them every second, which is more than enough for our simple purposes.
 
-It will also set the brightness on the LEDs and MFD, and update these if the preferences are changed.
+It will also set the brightness on the LEDs; the MFD; and the blink status of the clutch/hat buttons, and update these if the preferences are changed.
 
 Preferences
 -----------
@@ -32,10 +32,12 @@ sudo defaults write /Library/Preferences/org.infernus.X52ProDaemon DateFormat -s
 * **ClockType** - *string* value of 12 or 24 (default)
 * **MFDBrightness** - **int** value of 0 - 128 (default)
 * **LEDBrightness** - **int** value of 0 - 128 (default)
+* **BlinkClutch** - **boolean** value of true / false (default)
 
 To Do
 -----
 
-* Write a control panel for the above
+* Write a control panel for the above and to allow control of the various LEDs
+
 
 
