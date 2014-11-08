@@ -42,6 +42,7 @@ typedef struct DeviceData {
     IOUSBDeviceInterface **deviceInterface;
     dispatch_source_t dispatchSource;
     
+    UInt16 lastTime;
     UInt16 lastDayMonth;
     UInt16 lastYear;
     UInt16 lastMFDBrightness;
@@ -51,7 +52,7 @@ typedef struct DeviceData {
 void SignalHandler(int sigraised);
 void SendControlRequest(IOUSBDeviceInterface** usbDevice, UInt16 wValue, UInt16 wIndex);
 void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo, DeviceData *deviceData);
-void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo);
+void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo, DeviceData *deviceData);
 void UpdateBrightness(IOUSBDeviceInterface **usbDevice, DeviceData *deviceData);
 void TimeUpdateHandler(void* context);
 void DeviceNotification(void *refCon, io_service_t service, natural_t messageType, void *messageArgument);
@@ -120,7 +121,7 @@ void UpdateDate(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo, Devi
     }
 }
 
-void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
+void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo, DeviceData *deviceData) {
     UInt16 timeValue;
     CFStringRef clockType;
     
@@ -139,7 +140,10 @@ void UpdateTime(IOUSBDeviceInterface **usbDevice, struct tm *localtimeInfo) {
         timeValue |= (UInt16) (1 << 15);
     }
     
-    SendControlRequest(usbDevice, timeValue, INDEX_UPDATE_PRIMARY_CLOCK);
+    if (deviceData->lastTime != timeValue) {
+        SendControlRequest(usbDevice, timeValue, INDEX_UPDATE_PRIMARY_CLOCK);
+        deviceData->lastTime = timeValue;
+    }
     
     if (clockType != DEFAULT_CLOCK_TYPE) {
         CFRelease(clockType);
@@ -182,7 +186,7 @@ void TimeUpdateHandler(void* context) {
     
         openResult = (*dataRef->deviceInterface)->USBDeviceOpen(dataRef->deviceInterface);
         if (openResult == kIOReturnSuccess || openResult == kIOReturnExclusiveAccess) {
-            UpdateTime(dataRef->deviceInterface, localtimeInfo);
+            UpdateTime(dataRef->deviceInterface, localtimeInfo, dataRef);
             UpdateDate(dataRef->deviceInterface, localtimeInfo, dataRef);
             UpdateBrightness(dataRef->deviceInterface, dataRef);
             
