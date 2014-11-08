@@ -20,6 +20,11 @@ This will keep the date & time up to date on the device. It'll update them every
 
 It will also set the brightness on the LEDs; the MFD; and the blink status of the clutch/hat buttons, and update these if the preferences are changed.
 
+What This Won't Cover
+---------------------
+
+This is intended to cover the non-gameplay parts of the X52, so it won't ever cover button mappings or such. Use [ControllerMate](http://www.controllermate.com), it's great :-)
+
 Preferences
 -----------
 
